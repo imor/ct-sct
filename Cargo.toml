@@ -8,9 +8,17 @@ authors = ["Raminder Singh"]
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/imor/ct-sct"
 categories = ["cryptography", "data-structures", "encoding"]
-keyword = ["crypto", "x509"]
+keywords = ["crypto", "x509"]
 readme = "README.md"
 edition = "2021"
 rust-version = "1.65"
 
 [dependencies]
+const-oid = { version = "0.9.2", features = ["db"]}
+# const-oid = { path="../formats/const-oid", features = ["db"] }
+der = { version = "0.7.6", features = ["alloc"]}
+tls_codec = { version = "0.2.0" }
+x509-cert = "0.2"
+
+# [patch.crates-io]
+# const-oid = { path="../formats/const-oid" }
