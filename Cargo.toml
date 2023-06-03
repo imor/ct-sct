@@ -1,0 +1,16 @@
+[package]
+name = "ct-sct"
+version = "0.1.0"
+description = """
+A crate to encode or decode Signed Certificate Timestamps (SCTs) extension in X.509 certificates.
+"""
+authors = ["Raminder Singh"]
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/imor/ct-sct"
+categories = ["cryptography", "data-structures", "encoding"]
+keyword = ["crypto", "x509"]
+readme = "README.md"
+edition = "2021"
+rust-version = "1.65"
+
+[dependencies]
