@@ -1,3 +1,4 @@
+//! Signed Certificate Timestamps (SCTs)
 use std::{fmt::Display, time::Duration};
 
 use const_oid::{AssociatedOid, ObjectIdentifier};
@@ -6,13 +7,15 @@ use x509_cert::{ext::AsExtension, impl_newtype, time::Time};
 
 // Remove this constant when the upstream PR is merged:
 // https://github.com/RustCrypto/formats/pull/1094
+/// OID for signed certificate timestamps extension
 pub const CT_PRECERT_SCTS: ObjectIdentifier =
     ObjectIdentifier::new_unwrap("1.3.6.1.4.1.11129.2.4.2");
 
+/// Signed certificate timestamps list
 pub struct SctList(pub OctetString);
 
 impl AssociatedOid for SctList {
-    const OID: const_oid::ObjectIdentifier = CT_PRECERT_SCTS;
+    const OID: ObjectIdentifier = CT_PRECERT_SCTS;
 }
 
 impl_newtype!(SctList, OctetString);
@@ -27,20 +30,32 @@ impl AsExtension for SctList {
     }
 }
 
+/// Error returned when decoding an SCT list
 #[derive(Debug)]
 pub enum Error {
+    /// Returned if the SCT list's length from the prefix doesn't match the byte slice length
     DecodeTlsSctListError,
+    /// Returned if the SCT's length from the prefix is greater than the byte slice length
     DecodeTlsSctError,
+    /// Returned if the decoded [Version] is invalid
     DecodeVersionError,
+    /// Returned if not enough bytes are left in the byte slice to decode an integer
     DecodeIntError,
+    /// Returned if less than 32 bytes are left in the byte slice to decode a log id
     DecodeLogIdError,
+    /// Returned if timestamp can't be decoded into a [der::asn1::UtcTime] or a [der::asn1::GeneralizedTime]
     DecodeTimestampError,
+    /// Returned if the extenions' length from the prefix is greater than the byte slice length
     DecodeExtensionsError,
+    /// Returned if the digitally signed struct's length from the prefix is greater than the byte slice length
     DecodeDigitallySignedError,
+    /// Returned if the decoded [HashAlgo] is invalid
     DecodeHashAlgoError,
+    /// Returned if the decoded [SignatureAlgo] is invalid
     DecodeSignAlgoError,
 }
 
+/// Decodes a u8 from the byte slice and returns the rest of the bytes
 fn decode_u8_be(bytes: &[u8]) -> Result<(u8, &[u8]), Error> {
     if bytes.is_empty() {
         return Err(Error::DecodeIntError);
@@ -50,6 +65,7 @@ fn decode_u8_be(bytes: &[u8]) -> Result<(u8, &[u8]), Error> {
     Ok((result, &bytes[1..]))
 }
 
+/// Decodes a u16 as a big-endian integer from the byte slice and returns the rest of the bytes
 fn decode_u16_be(bytes: &[u8]) -> Result<(u16, &[u8]), Error> {
     if bytes.len() < 2 {
         return Err(Error::DecodeIntError);
@@ -59,6 +75,7 @@ fn decode_u16_be(bytes: &[u8]) -> Result<(u16, &[u8]), Error> {
     Ok((result, &bytes[2..]))
 }
 
+/// Decodes a u64 as a big-endian integer from the byte slice and returns the rest of the bytes
 fn decode_u64_be(bytes: &[u8]) -> Result<(u64, &[u8]), Error> {
     if bytes.len() < 8 {
         return Err(Error::DecodeIntError);
@@ -68,16 +85,20 @@ fn decode_u64_be(bytes: &[u8]) -> Result<(u64, &[u8]), Error> {
     Ok((result, &bytes[8..]))
 }
 
+/// A TLS SCT list embedded in an x509 certificate
 pub struct TlsSctList {
+    /// A vector of TLS Signed Certificate Timestamps.
     pub scts: Vec<TlsSct>,
 }
 
 impl TlsSctList {
+    /// Decodes a [TlsSctList] from a [SctList]
     pub fn from_sct_list(sct_list: &SctList) -> Result<Self, Error> {
         let bytes = sct_list.0.as_bytes();
         TlsSctList::decode(bytes)
     }
 
+    /// Decodes a [TlsSctList] from a TLS encoded byte slice. See RFC 5246 to know about TLS encoding.
     fn decode(bytes: &[u8]) -> Result<Self, Error>
     where
         Self: Sized,
@@ -98,15 +119,22 @@ impl TlsSctList {
     }
 }
 
+/// A TLS Signed Certificate Timestamp.
 pub struct TlsSct {
+    /// Version of the SCT
     pub version: Version,
+    /// Log id of the SCT
     pub log_id: [u8; 32],
+    /// Timestamp of the SCT
     pub timestamp: Time,
+    /// Extensions of the SCT
     pub extensions: Vec<u8>,
+    /// Signature of the SCT
     pub sign: DigitallySigned,
 }
 
 impl TlsSct {
+    /// Decodes a [TlsSct] from a byte slice
     fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error>
     where
         Self: Sized,
@@ -134,6 +162,7 @@ impl TlsSct {
         ))
     }
 
+    /// Decodes a log id from a byte slice
     fn decode_log_id(bytes: &[u8]) -> Result<([u8; 32], &[u8]), Error> {
         if bytes.len() < 32 {
             return Err(Error::DecodeLogIdError);
@@ -143,6 +172,7 @@ impl TlsSct {
         Ok((result, &bytes[32..]))
     }
 
+    /// Decodes a timestamp from a byte slice
     fn decode_timestamp(bytes: &[u8]) -> Result<(Time, &[u8]), Error> {
         let (timestamp, bytes) = decode_u64_be(bytes)?;
         let timestamp = Duration::from_millis(timestamp);
@@ -159,6 +189,7 @@ impl TlsSct {
         }
     }
 
+    /// Decodes extensions from a byte slice
     fn decode_extensions(bytes: &[u8]) -> Result<(Vec<u8>, &[u8]), Error> {
         let (len, rest) = decode_u16_be(bytes)?;
         let len = len as usize;
@@ -171,12 +202,15 @@ impl TlsSct {
     }
 }
 
+/// Version of a Signed Certificate Timestamp
 #[derive(Debug)]
 pub enum Version {
+    /// Version 1
     V1 = 0,
 }
 
 impl Version {
+    /// Decodes a [Version] from a byte slice
     fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (version, bytes) = decode_u8_be(bytes)?;
         Ok((version.try_into()?, bytes))
@@ -202,13 +236,17 @@ impl Display for Version {
     }
 }
 
+/// Digital signature of a Signed Certificate Timestamp
 #[derive(Debug)]
 pub struct DigitallySigned {
+    /// [SignAndHashAlgo] of the struct
     pub sign_and_hash_algo: SignAndHashAlgo,
+    /// Signature of the struct
     pub sign: Vec<u8>,
 }
 
 impl DigitallySigned {
+    /// Decodes a [DigitallySigned] from a byte slice
     fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (sign_and_hash_algo, bytes) = SignAndHashAlgo::decode(bytes)?;
 
@@ -229,13 +267,17 @@ impl DigitallySigned {
     }
 }
 
+/// A pair of signature algorithm and a hash algorithm
 #[derive(Debug)]
 pub struct SignAndHashAlgo {
+    /// Signature algorithm
     pub sign: SignatureAlgo,
+    /// Hash algorithm
     pub hash: HashAlgo,
 }
 
 impl SignAndHashAlgo {
+    /// Decodes a [SignAndHashAlgo] from a byte slice
     fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (hash, bytes) = HashAlgo::decode(bytes)?;
         let (sign, bytes) = SignatureAlgo::decode(bytes)?;
@@ -252,15 +294,22 @@ impl Display for SignAndHashAlgo {
 /// Signature algorithms, as defined in RFC5246 and RFC8422
 #[derive(Debug)]
 pub enum SignatureAlgo {
+    /// Anonymous signature algo
     Anonymous = 0,
+    /// RSA signature algo
     Rsa = 1,
+    /// DSA signature algo
     Dsa = 2,
+    /// ECDSA signature algo
     Ecdsa = 3,
+    /// ED25519 signature algo
     Ed25519 = 7,
+    /// ED448 signature algo
     Ed448 = 8,
 }
 
 impl SignatureAlgo {
+    /// Decodes a [SignatureAlgo] from a byte slice
     fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (algo, bytes) = decode_u8_be(bytes)?;
         Ok((algo.try_into()?, bytes))
@@ -299,17 +348,26 @@ impl Display for SignatureAlgo {
 /// Hash algorithms, as defined in RFC5246 and RFC8422
 #[derive(Debug)]
 pub enum HashAlgo {
+    /// No algorithm
     None = 0,
+    /// MD5 algorithm
     Md5 = 1,
+    /// SHA1 algorithm
     Sha1 = 2,
+    /// SHA224 algorithm
     Sha224 = 3,
+    /// SHA256 algorithm
     Sha256 = 4,
+    /// SHA384 algorithm
     Sha384 = 5,
+    /// SHA512 algorithm
     Sha512 = 6,
+    /// Intrinsic algorithm
     Intrinsic = 8,
 }
 
 impl HashAlgo {
+    /// Decodes a [HashAlgo] from a byte slice
     fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (algo, bytes) = decode_u8_be(bytes)?;
         Ok((algo.try_into()?, bytes))
