@@ -1,8 +1,8 @@
-use std::fmt::Display;
+use std::{fmt::Display, time::Duration};
 
 use const_oid::{AssociatedOid, ObjectIdentifier};
-use der::asn1::OctetString;
-use x509_cert::{ext::AsExtension, impl_newtype};
+use der::asn1::{GeneralizedTime, OctetString, UtcTime};
+use x509_cert::{ext::AsExtension, impl_newtype, time::Time};
 
 // Remove this constant when the upstream PR is merged:
 // https://github.com/RustCrypto/formats/pull/1094
@@ -33,6 +33,7 @@ pub enum Error {
     DecodeTlsSctError,
     DecodeIntError,
     DecodeLogIdError,
+    DecodeTimestampError,
     DecodeExtensionsError,
     DecodeDigitallySignedError,
     DecodeHashAlgoError,
@@ -99,7 +100,7 @@ impl TlsSctList {
 pub struct TlsSct {
     pub version: u8,
     pub log_id: [u8; 32],
-    pub timestamp: u64,
+    pub timestamp: Time,
     pub extensions: Vec<u8>,
     pub sign: DigitallySigned,
 }
@@ -116,7 +117,7 @@ impl TlsSct {
         }
         let (version, bytes) = Self::decode_version(bytes)?;
         let (log_id, bytes) = Self::decode_log_id(bytes)?;
-        let (timestamp, bytes) = decode_u64_be(bytes)?;
+        let (timestamp, bytes) = Self::decode_timestamp(bytes)?;
         let (extensions, bytes) = Self::decode_extensions(bytes)?;
         let (sign, bytes) = DigitallySigned::decode(bytes)?;
 
@@ -143,6 +144,22 @@ impl TlsSct {
         let result = bytes[..32].try_into().unwrap();
 
         Ok((result, &bytes[32..]))
+    }
+
+    fn decode_timestamp(bytes: &[u8]) -> Result<(Time, &[u8]), Error> {
+        let (timestamp, bytes) = decode_u64_be(bytes)?;
+        let timestamp = Duration::from_millis(timestamp);
+        let generalized_time = GeneralizedTime::from_unix_duration(timestamp);
+        if let Ok(generalized_time) = generalized_time {
+            Ok((generalized_time.into(), bytes))
+        } else {
+            let utc_time = UtcTime::from_unix_duration(timestamp);
+            if let Ok(utc_time) = utc_time {
+                Ok((utc_time.into(), bytes))
+            } else {
+                Err(Error::DecodeTimestampError)
+            }
+        }
     }
 
     fn decode_extensions(bytes: &[u8]) -> Result<(Vec<u8>, &[u8]), Error> {
