@@ -31,6 +31,7 @@ impl AsExtension for SctList {
 pub enum Error {
     DecodeTlsSctListError,
     DecodeTlsSctError,
+    DecodeVersionError,
     DecodeIntError,
     DecodeLogIdError,
     DecodeTimestampError,
@@ -98,7 +99,7 @@ impl TlsSctList {
 }
 
 pub struct TlsSct {
-    pub version: u8,
+    pub version: Version,
     pub log_id: [u8; 32],
     pub timestamp: Time,
     pub extensions: Vec<u8>,
@@ -115,7 +116,7 @@ impl TlsSct {
         if len > bytes.len() {
             return Err(Error::DecodeTlsSctError);
         }
-        let (version, bytes) = Self::decode_version(bytes)?;
+        let (version, bytes) = Version::decode(bytes)?;
         let (log_id, bytes) = Self::decode_log_id(bytes)?;
         let (timestamp, bytes) = Self::decode_timestamp(bytes)?;
         let (extensions, bytes) = Self::decode_extensions(bytes)?;
@@ -131,10 +132,6 @@ impl TlsSct {
             },
             bytes,
         ))
-    }
-
-    fn decode_version(bytes: &[u8]) -> Result<(u8, &[u8]), Error> {
-        decode_u8_be(bytes)
     }
 
     fn decode_log_id(bytes: &[u8]) -> Result<([u8; 32], &[u8]), Error> {
@@ -171,6 +168,37 @@ impl TlsSct {
         let mut vec = Vec::with_capacity(len);
         vec.extend_from_slice(&rest[..len]);
         Ok((vec, &rest[len..]))
+    }
+}
+
+#[derive(Debug)]
+pub enum Version {
+    V1 = 0,
+}
+
+impl Version {
+    fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (version, bytes) = decode_u8_be(bytes)?;
+        Ok((version.try_into()?, &bytes))
+    }
+}
+
+impl TryFrom<u8> for Version {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Version::V1),
+            _ => Err(Error::DecodeVersionError),
+        }
+    }
+}
+
+impl Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Version::V1 => write!(f, "v1"),
+        }
     }
 }
 
