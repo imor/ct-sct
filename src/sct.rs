@@ -249,7 +249,7 @@ impl Display for SignAndHashAlgo {
     }
 }
 
-/// Signature algorithms, as defined in [RFC5246] and [RFC8422]
+/// Signature algorithms, as defined in RFC5246 and RFC8422
 #[derive(Debug)]
 pub enum SignatureAlgo {
     Anonymous = 0,
@@ -296,7 +296,7 @@ impl Display for SignatureAlgo {
     }
 }
 
-/// Hash algorithms, as defined in [RFC5246] and [RFC8422]
+/// Hash algorithms, as defined in RFC5246 and RFC8422
 #[derive(Debug)]
 pub enum HashAlgo {
     None = 0,
