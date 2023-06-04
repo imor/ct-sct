@@ -42,7 +42,7 @@ pub enum Error {
 }
 
 fn decode_u8_be(bytes: &[u8]) -> Result<(u8, &[u8]), Error> {
-    if bytes.len() < 1 {
+    if bytes.is_empty() {
         return Err(Error::DecodeIntError);
     }
     let result = u8::from_be_bytes(bytes[..1].try_into().unwrap());
@@ -74,8 +74,8 @@ pub struct TlsSctList {
 
 impl TlsSctList {
     pub fn from_sct_list(sct_list: &SctList) -> Result<Self, Error> {
-        let mut bytes = sct_list.0.as_bytes();
-        TlsSctList::decode(&mut bytes)
+        let bytes = sct_list.0.as_bytes();
+        TlsSctList::decode(bytes)
     }
 
     fn decode(bytes: &[u8]) -> Result<Self, Error>
@@ -179,7 +179,7 @@ pub enum Version {
 impl Version {
     fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (version, bytes) = decode_u8_be(bytes)?;
-        Ok((version.try_into()?, &bytes))
+        Ok((version.try_into()?, bytes))
     }
 }
 
@@ -263,7 +263,7 @@ pub enum SignatureAlgo {
 impl SignatureAlgo {
     fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (algo, bytes) = decode_u8_be(bytes)?;
-        Ok((algo.try_into()?, &bytes))
+        Ok((algo.try_into()?, bytes))
     }
 }
 
@@ -312,7 +312,7 @@ pub enum HashAlgo {
 impl HashAlgo {
     fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (algo, bytes) = decode_u8_be(bytes)?;
-        Ok((algo.try_into()?, &bytes))
+        Ok((algo.try_into()?, bytes))
     }
 }
 
