@@ -33,6 +33,8 @@ pub enum Error {
     DecodeLogIdError,
     DecodeExtensionsError,
     DecodeDigitallySignedError,
+    DecodeHashAlgoError,
+    DecodeSignAlgoError,
 }
 
 fn decode_u8_be(bytes: &[u8]) -> Result<(u8, &[u8]), Error> {
@@ -194,22 +196,74 @@ impl SignAndHashAlgo {
     }
 }
 
+/// Signature algorithms, as defined in [RFC5246] and [RFC8422]
 #[derive(Debug)]
-pub struct SignatureAlgo(u8);
+pub enum SignatureAlgo {
+    Anonymous = 0,
+    Rsa = 1,
+    Dsa = 2,
+    Ecdsa = 3,
+    Ed25519 = 7,
+    Ed448 = 8,
+}
+
+impl TryFrom<u8> for SignatureAlgo {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(SignatureAlgo::Anonymous),
+            1 => Ok(SignatureAlgo::Rsa),
+            2 => Ok(SignatureAlgo::Dsa),
+            3 => Ok(SignatureAlgo::Ecdsa),
+            7 => Ok(SignatureAlgo::Ed25519),
+            8 => Ok(SignatureAlgo::Ed448),
+            _ => Err(Error::DecodeSignAlgoError),
+        }
+    }
+}
 
 impl SignatureAlgo {
     fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (algo, bytes) = decode_u8_be(bytes)?;
-        Ok((Self(algo), &bytes))
+        Ok((algo.try_into()?, &bytes))
     }
 }
 
+/// Hash algorithms, as defined in [RFC5246] and [RFC8422]
 #[derive(Debug)]
-pub struct HashAlgo(u8);
+pub enum HashAlgo {
+    None = 0,
+    Md5 = 1,
+    Sha1 = 2,
+    Sha224 = 3,
+    Sha256 = 4,
+    Sha384 = 5,
+    Sha512 = 6,
+    Intrinsic = 8,
+}
+
+impl TryFrom<u8> for HashAlgo {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(HashAlgo::None),
+            1 => Ok(HashAlgo::Md5),
+            2 => Ok(HashAlgo::Sha1),
+            3 => Ok(HashAlgo::Sha224),
+            4 => Ok(HashAlgo::Sha256),
+            5 => Ok(HashAlgo::Sha384),
+            6 => Ok(HashAlgo::Sha512),
+            8 => Ok(HashAlgo::Intrinsic),
+            _ => Err(Error::DecodeHashAlgoError),
+        }
+    }
+}
 
 impl HashAlgo {
     fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (algo, bytes) = decode_u8_be(bytes)?;
-        Ok((Self(algo), &bytes))
+        Ok((algo.try_into()?, &bytes))
     }
 }
