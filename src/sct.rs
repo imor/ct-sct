@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use const_oid::{AssociatedOid, ObjectIdentifier};
 use der::asn1::OctetString;
 use x509_cert::{ext::AsExtension, impl_newtype};
@@ -196,6 +198,12 @@ impl SignAndHashAlgo {
     }
 }
 
+impl Display for SignAndHashAlgo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-with-{}", self.sign, self.hash)
+    }
+}
+
 /// Signature algorithms, as defined in [RFC5246] and [RFC8422]
 #[derive(Debug)]
 pub enum SignatureAlgo {
@@ -205,6 +213,13 @@ pub enum SignatureAlgo {
     Ecdsa = 3,
     Ed25519 = 7,
     Ed448 = 8,
+}
+
+impl SignatureAlgo {
+    fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (algo, bytes) = decode_u8_be(bytes)?;
+        Ok((algo.try_into()?, &bytes))
+    }
 }
 
 impl TryFrom<u8> for SignatureAlgo {
@@ -223,10 +238,16 @@ impl TryFrom<u8> for SignatureAlgo {
     }
 }
 
-impl SignatureAlgo {
-    fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
-        let (algo, bytes) = decode_u8_be(bytes)?;
-        Ok((algo.try_into()?, &bytes))
+impl Display for SignatureAlgo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SignatureAlgo::Anonymous => write!(f, "anonymous"),
+            SignatureAlgo::Rsa => write!(f, "rsa"),
+            SignatureAlgo::Dsa => write!(f, "dsa"),
+            SignatureAlgo::Ecdsa => write!(f, "ecdsa"),
+            SignatureAlgo::Ed25519 => write!(f, "ed25519"),
+            SignatureAlgo::Ed448 => write!(f, "ed448"),
+        }
     }
 }
 
@@ -241,6 +262,13 @@ pub enum HashAlgo {
     Sha384 = 5,
     Sha512 = 6,
     Intrinsic = 8,
+}
+
+impl HashAlgo {
+    fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (algo, bytes) = decode_u8_be(bytes)?;
+        Ok((algo.try_into()?, &bytes))
+    }
 }
 
 impl TryFrom<u8> for HashAlgo {
@@ -261,9 +289,17 @@ impl TryFrom<u8> for HashAlgo {
     }
 }
 
-impl HashAlgo {
-    fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
-        let (algo, bytes) = decode_u8_be(bytes)?;
-        Ok((algo.try_into()?, &bytes))
+impl Display for HashAlgo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HashAlgo::None => write!(f, "NONE"),
+            HashAlgo::Md5 => write!(f, "MD5"),
+            HashAlgo::Sha1 => write!(f, "SHA1"),
+            HashAlgo::Sha224 => write!(f, "SHA224"),
+            HashAlgo::Sha256 => write!(f, "SHA256"),
+            HashAlgo::Sha384 => write!(f, "SHA384"),
+            HashAlgo::Sha512 => write!(f, "SHA512"),
+            HashAlgo::Intrinsic => write!(f, "INTRINSIC"),
+        }
     }
 }
