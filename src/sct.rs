@@ -24,3 +24,192 @@ impl AsExtension for SctList {
         false
     }
 }
+
+#[derive(Debug)]
+pub enum Error {
+    DecodeTlsSctListError,
+    DecodeTlsSctError,
+    DecodeIntError,
+    DecodeLogIdError,
+    DecodeExtensionsError,
+    DecodeDigitallySignedError,
+}
+
+fn decode_u8_be(bytes: &[u8]) -> Result<(u8, &[u8]), Error> {
+    if bytes.len() < 1 {
+        return Err(Error::DecodeIntError);
+    }
+    let result = u8::from_be_bytes(bytes[..1].try_into().unwrap());
+
+    Ok((result, &bytes[1..]))
+}
+
+fn decode_u16_be(bytes: &[u8]) -> Result<(u16, &[u8]), Error> {
+    if bytes.len() < 2 {
+        return Err(Error::DecodeIntError);
+    }
+    let result = u16::from_be_bytes(bytes[..2].try_into().unwrap());
+
+    Ok((result, &bytes[2..]))
+}
+
+fn decode_u64_be(bytes: &[u8]) -> Result<(u64, &[u8]), Error> {
+    if bytes.len() < 8 {
+        return Err(Error::DecodeIntError);
+    }
+    let result = u64::from_be_bytes(bytes[..8].try_into().unwrap());
+
+    Ok((result, &bytes[8..]))
+}
+
+pub struct TlsSctList {
+    pub scts: Vec<TlsSct>,
+}
+
+impl TlsSctList {
+    pub fn from_sct_list(sct_list: &SctList) -> Result<Self, Error> {
+        let mut bytes = sct_list.0.as_bytes();
+        TlsSctList::decode(&mut bytes)
+    }
+
+    fn decode(bytes: &[u8]) -> Result<Self, Error>
+    where
+        Self: Sized,
+    {
+        let (len, bytes) = decode_u16_be(bytes)?;
+        let len = len as usize;
+        if len != bytes.len() {
+            return Err(Error::DecodeTlsSctListError);
+        }
+        let mut scts = Vec::new();
+        let mut bytes = bytes;
+        while !bytes.is_empty() {
+            let (sct, rest) = TlsSct::decode(bytes)?;
+            bytes = rest;
+            scts.push(sct);
+        }
+        Ok(Self { scts })
+    }
+}
+
+pub struct TlsSct {
+    pub version: u8,
+    pub log_id: [u8; 32],
+    pub timestamp: u64,
+    pub extensions: Vec<u8>,
+    pub sign: DigitallySigned,
+}
+
+impl TlsSct {
+    fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error>
+    where
+        Self: Sized,
+    {
+        let (len, bytes) = decode_u16_be(bytes)?;
+        let len = len as usize;
+        if len > bytes.len() {
+            return Err(Error::DecodeTlsSctError);
+        }
+        let (version, bytes) = Self::decode_version(bytes)?;
+        let (log_id, bytes) = Self::decode_log_id(bytes)?;
+        let (timestamp, bytes) = decode_u64_be(bytes)?;
+        let (extensions, bytes) = Self::decode_extensions(bytes)?;
+        let (sign, bytes) = DigitallySigned::decode(bytes)?;
+
+        Ok((
+            Self {
+                version,
+                log_id,
+                timestamp,
+                extensions,
+                sign,
+            },
+            bytes,
+        ))
+    }
+
+    fn decode_version(bytes: &[u8]) -> Result<(u8, &[u8]), Error> {
+        decode_u8_be(bytes)
+    }
+
+    fn decode_log_id(bytes: &[u8]) -> Result<([u8; 32], &[u8]), Error> {
+        if bytes.len() < 32 {
+            return Err(Error::DecodeLogIdError);
+        }
+        let result = bytes[..32].try_into().unwrap();
+
+        Ok((result, &bytes[32..]))
+    }
+
+    fn decode_extensions(bytes: &[u8]) -> Result<(Vec<u8>, &[u8]), Error> {
+        let (len, rest) = decode_u16_be(bytes)?;
+        let len = len as usize;
+        if len > bytes.len() {
+            return Err(Error::DecodeExtensionsError);
+        }
+        let mut vec = Vec::with_capacity(len);
+        vec.extend_from_slice(&rest[..len]);
+        Ok((vec, &rest[len..]))
+    }
+}
+
+#[derive(Debug)]
+pub struct DigitallySigned {
+    pub sign_and_hash_algo: SignAndHashAlgo,
+    pub sign: Vec<u8>,
+}
+
+impl DigitallySigned {
+    fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (sign_and_hash_algo, bytes) = SignAndHashAlgo::decode(bytes)?;
+
+        let (len, rest) = decode_u16_be(bytes)?;
+        let len = len as usize;
+        if len > bytes.len() {
+            return Err(Error::DecodeDigitallySignedError);
+        }
+        let mut sign = Vec::with_capacity(len);
+        sign.extend_from_slice(&rest[..len]);
+        Ok((
+            Self {
+                sign_and_hash_algo,
+                sign,
+            },
+            &rest[len..],
+        ))
+    }
+}
+
+#[derive(Debug)]
+pub struct SignAndHashAlgo {
+    pub sign: SignatureAlgo,
+    pub hash: HashAlgo,
+}
+
+impl SignAndHashAlgo {
+    fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (hash, bytes) = HashAlgo::decode(bytes)?;
+        let (sign, bytes) = SignatureAlgo::decode(bytes)?;
+        Ok((Self { sign, hash }, bytes))
+    }
+}
+
+#[derive(Debug)]
+pub struct SignatureAlgo(u8);
+
+impl SignatureAlgo {
+    fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (algo, bytes) = decode_u8_be(bytes)?;
+        Ok((Self(algo), &bytes))
+    }
+}
+
+#[derive(Debug)]
+pub struct HashAlgo(u8);
+
+impl HashAlgo {
+    fn decode(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
+        let (algo, bytes) = decode_u8_be(bytes)?;
+        Ok((Self(algo), &bytes))
+    }
+}
